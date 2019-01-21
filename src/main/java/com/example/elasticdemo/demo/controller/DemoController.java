@@ -69,7 +69,7 @@ public class DemoController {
         return "success";
     }
 
-    @PostMapping("index")
+    @RequestMapping("index")
     public Object index() {
         demoService.createIndex();
         return "success";
