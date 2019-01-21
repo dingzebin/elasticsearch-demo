@@ -14,6 +14,8 @@ import org.elasticsearch.index.query.QueryBuilders;
 import org.elasticsearch.search.SearchHit;
 import org.elasticsearch.search.fetch.subphase.highlight.HighlightBuilder;
 import org.elasticsearch.search.fetch.subphase.highlight.HighlightField;
+import org.elasticsearch.search.sort.SortBuilders;
+import org.elasticsearch.search.sort.SortOrder;
 import org.elasticsearch.search.suggest.Suggest;
 import org.elasticsearch.search.suggest.SuggestBuilder;
 import org.elasticsearch.search.suggest.SuggestBuilders;
@@ -30,7 +32,10 @@ import org.springframework.data.elasticsearch.core.completion.Completion;
 import org.springframework.data.elasticsearch.core.query.NativeSearchQueryBuilder;
 import org.springframework.data.elasticsearch.core.query.SearchQuery;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
+import java.sql.Timestamp;
+import java.text.SimpleDateFormat;
 import java.util.*;
 
 /**
@@ -39,112 +44,117 @@ import java.util.*;
  * @create: 2019/1/19
  */
 @Service
-public class DemoServiceImpl implements DemoService{
-		@Autowired
-		DemoRepository demoRepository;
-		@Autowired
-		ElasticsearchTemplate elasticsearchTemplate;
-		@Override
-		public void insert(Demo demo) {
-				this.createSuggest(demo);
-				demoRepository.save(demo);
-		}
+public class DemoServiceImpl implements DemoService {
+    @Autowired
+    DemoRepository demoRepository;
+    @Autowired
+    ElasticsearchTemplate elasticsearchTemplate;
 
-		private void createSuggest(Demo demo) {
-				AnalyzeRequestBuilder requestBuilder = new AnalyzeRequestBuilder(elasticsearchTemplate.getClient()
-								, AnalyzeAction.INSTANCE, "demo", demo.getTitle(), demo.getMainBody());
-				requestBuilder.setAnalyzer("ik_smart");
-				AnalyzeResponse response = requestBuilder.get();
-				List<AnalyzeResponse.AnalyzeToken> tokens = response.getTokens();
-				List<String> suggets = new ArrayList<String>();
-				for (AnalyzeResponse.AnalyzeToken token : tokens) {
-						if ("<NUM>".equals(token.getType()) || token.getTerm().length() < 2) {
-								continue;
-						}
-						suggets.add(token.getTerm());
-				}
-				String[] temp = new String[suggets.size()];
-				Completion completion = new Completion(suggets.toArray(temp));
-				demo.setSuggest(completion);
-		}
+    @Override
+    public void insert(Demo demo) {
+        // 创建自动补全索引
+        this.createSuggest(demo);
+        demoRepository.save(demo);
+    }
 
-		@Override
-		public AggregatedPage<Demo> search(String searchKey, Integer num, Integer size) {
-				String preTag = "<font color='red'>";
-				String postTag = "</font>";
-				SearchQuery query = new NativeSearchQueryBuilder().withFields("id", "title","creator","createDate","mainBody")
-								.withQuery(buildQueryBuild(searchKey))
-								.withHighlightFields(new HighlightBuilder.Field("title").preTags(preTag).postTags(postTag),
-												new HighlightBuilder.Field("mainBody").preTags(preTag).postTags(postTag))
-								.withPageable(PageRequest.of(num, size)).build();
-				AggregatedPage<Demo> demos = elasticsearchTemplate.queryForPage(query, Demo.class, new SearchResultMapper() {
-						@Override
-						public <T> AggregatedPage<T> mapResults(SearchResponse response, Class<T> aClass, Pageable pageable) {
-								List<Demo> chunks = new LinkedList<>();
-								for (SearchHit searchHit : response.getHits()) {
-										if (response.getHits().getHits().length <= 0) {
-												return null;
-										}
+    private void createSuggest(Demo demo) {
+        AnalyzeRequestBuilder requestBuilder = new AnalyzeRequestBuilder(elasticsearchTemplate.getClient()
+                , AnalyzeAction.INSTANCE, "demo", demo.getTitle(), demo.getMainBody());
+        requestBuilder.setAnalyzer("ik_smart");
+        AnalyzeResponse response = requestBuilder.get();
+        List<AnalyzeResponse.AnalyzeToken> tokens = response.getTokens();
+        List<String> suggets = new ArrayList<String>();
+        for (AnalyzeResponse.AnalyzeToken token : tokens) {
+            if ("<NUM>".equals(token.getType()) || token.getTerm().length() < 2) {
+                continue;
+            }
+            suggets.add(token.getTerm());
+        }
+        String[] temp = new String[suggets.size()];
+        Completion completion = new Completion(suggets.toArray(temp));
+        demo.setSuggest(completion);
+    }
 
-										Demo demo = JSON.parseObject(JSON.toJSONString(searchHit.getSourceAsMap()), Demo.class);
-										//name or memoe
-										HighlightField title = searchHit.getHighlightFields().get("title");
-										if (title != null) {
-												demo.setTitle(title.fragments()[0].toString());
-										}
-										HighlightField mainBody = searchHit.getHighlightFields().get("mainBody");
-										if (mainBody != null) {
-												demo.setMainBody(mainBody.fragments()[0].toString());
-										}
+    @Override
+    public AggregatedPage<Demo> search(String searchKey, Integer num, Integer size) {
+        searchKey = StringUtils.isEmpty(searchKey) ? "*" : searchKey;
+        String preTag = "<font color='red'>";
+        String postTag = "</font>";
+        SearchQuery query = new NativeSearchQueryBuilder().withFields("id", "title", "creator", "createDate", "mainBody")
+                .withQuery(buildQueryBuild(searchKey)).withSort(SortBuilders.fieldSort("createDate").order(SortOrder.DESC))
+                .withHighlightFields(new HighlightBuilder.Field("title").preTags(preTag).postTags(postTag),
+                        new HighlightBuilder.Field("mainBody").preTags(preTag).postTags(postTag)
+                                .fragmentSize(70).numOfFragments(3).noMatchSize(70)) // 限制返回字数
+                .build();
+        query.setPageable(PageRequest.of(num, size)); // 分页
+        SimpleDateFormat simpleDateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+        AggregatedPage<Demo> demos = elasticsearchTemplate.queryForPage(query, Demo.class, new SearchResultMapper() {
+            @Override
+            public <T> AggregatedPage<T> mapResults(SearchResponse response, Class<T> aClass, Pageable pageable) {
+                List<Demo> chunks = new LinkedList<>();
+                for (SearchHit searchHit : response.getHits()) {
+                    if (response.getHits().getHits().length <= 0) {
+                        return null;
+                    }
+                    Demo demo = JSON.parseObject(JSON.toJSONString(searchHit.getSourceAsMap()), Demo.class);
+                    demo.setCreateTime(simpleDateFormat.format(new Date(demo.getCreateDate())));
+                    //name or memoe
+                    HighlightField title = searchHit.getHighlightFields().get("title");
+                    if (title != null) {
+                        demo.setTitle(title.fragments()[0].toString());
+                    }
+                    HighlightField mainBody = searchHit.getHighlightFields().get("mainBody");
+                    if (mainBody != null) {
+                        demo.setMainBody(mainBody.fragments()[0].toString());
+                    }
+                    chunks.add(demo);
+                }
+                if (!chunks.isEmpty()) {
+                    return new AggregatedPageImpl<>((List<T>) chunks);
+                }
 
-										chunks.add(demo);
-								}
-								if (!chunks.isEmpty()) {
-										return new AggregatedPageImpl<>((List<T>)chunks);
-								}
+                return null;
+            }
+        });
+        return demos;
+    }
 
-								return null;
-						}
-				});
-				return demos;
-		}
+    @Override
+    public void delete(String id) {
+        demoRepository.deleteById(id);
+    }
 
-		@Override
-		public void delete(String id) {
-				demoRepository.deleteById(id);
-		}
+    @Override
+    public void createIndex() {
+        elasticsearchTemplate.putMapping(Demo.class);
 
-		@Override
-		public void createIndex() {
-				elasticsearchTemplate.putMapping(Demo.class);
+    }
 
-		}
+    @Override
+    public Object suggest(String key) {
+        CompletionSuggestionBuilder s = SuggestBuilders.completionSuggestion("suggest").prefix(key).size(100);
+        SuggestBuilder b = new SuggestBuilder().addSuggestion("suggest", s);
+        SearchResponse response = elasticsearchTemplate.suggest(b, "demo");
+        Set<String> suggests = new HashSet<>();
 
-		@Override
-		public Object suggest(String key) {
-				CompletionSuggestionBuilder s = SuggestBuilders.completionSuggestion("suggest").prefix(key).size(100);
-				SuggestBuilder b = new SuggestBuilder().addSuggestion("suggest", s);
-				SearchResponse response = elasticsearchTemplate.suggest(b, "demo");
-				Set<String> suggests = new HashSet<>();
+        List entries = response.getSuggest().getSuggestion("suggest").getEntries();
+        for (Object entry : entries) {
+            if (entry instanceof CompletionSuggestion.Entry) {
+                CompletionSuggestion.Entry item = (CompletionSuggestion.Entry) entry;
 
-				List entries = response.getSuggest().getSuggestion("suggest").getEntries();
-				for (Object entry : entries) {
-						if (entry instanceof CompletionSuggestion.Entry) {
-								CompletionSuggestion.Entry item = (CompletionSuggestion.Entry) entry;
+                if (item.getOptions().isEmpty()) {
+                    continue;
+                }
+                for (CompletionSuggestion.Entry.Option option : item.getOptions()) {
+                    String tip = option.getText().string();
+                    suggests.add(tip);
+                }
+            }
+        }
+        return suggests;
+    }
 
-								if (item.getOptions().isEmpty()) {
-										continue;
-								}
-								for (CompletionSuggestion.Entry.Option option : item.getOptions()) {
-										String tip = option.getText().string();
-										suggests.add(tip);
-								}
-						}
-				}
-				return suggests;
-		}
-
-		private QueryBuilder buildQueryBuild(String searchKey) {
-				return QueryBuilders.boolQuery().should(QueryBuilders.queryStringQuery(searchKey));
-		}
+    private QueryBuilder buildQueryBuild(String searchKey) {
+        return QueryBuilders.boolQuery().should(QueryBuilders.queryStringQuery(searchKey));
+    }
 }

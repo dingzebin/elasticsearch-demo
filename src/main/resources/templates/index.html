@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+    <link rel="stylesheet" type="text/css" th:href="@{/css/index.css}">
+    <link rel="stylesheet" th:href="@{/css/element.css}">
+<style>
+    pre{
+        white-space:pre-wrap;
+        white-space:-moz-pre-wrap;
+        white-space:-pre-wrap;
+        white-space:-o-pre-wrap;
+        word-wrap:break-word;
+        display: inline;
+    }
+
+</style>
+</head>
+<body>
+    <div id="item-list" style="width: 1200px; margin: auto;">
+       <template>
+           <div style="vertical-align: center">
+               <el-button type="primary" @click="onAdd">添加</el-button>
+               <el-button type="primary" @click="onUploadClick">上传</el-button>
+               <el-autocomplete
+                       class="inline-input"
+                       v-model="queryParam.q"
+                       :fetch-suggestions="querySearch"
+                       :trigger-on-focus="false"
+                       @select="handleSelect"
+                       slot="prepend"
+                       style="width: 300px;"
+               >
+                   <template slot-scope="{ item }">
+                       <div class="name">{{ item }}</div>
+                   </template>
+               </el-autocomplete>
+               <el-button slot="append" @click="loadList">搜索</el-button>
+           </div>
+        <el-table
+                :data="tableData"
+                style="width: 100%">
+            <el-table-column
+                    prop="title"
+                    label="标题"
+                    width="400">
+                <template slot-scope="scope" >
+                    <pre v-html="scope.row.title"></pre>
+                </template>
+            </el-table-column>
+            <el-table-column
+                    prop="creator"
+                    label="创建者"
+                    width="240">
+            </el-table-column>
+            <el-table-column
+                    prop="createTime"
+                    label="创建时间">
+            </el-table-column>
+            <el-table-column label="内容" width="400">
+                <template slot-scope="scope" >
+                    <pre v-html="scope.row.mainBody"></pre>....
+                </template>
+            </el-table-column>
+        </el-table>
+        <el-dialog title="添加" :visible.sync="dialogTableVisible">
+            <el-form :model="form">
+                <el-form-item label="标题" :label-width="formLabelWidth">
+                    <el-input v-model="form.title"></el-input>
+                </el-form-item>
+                <el-form-item label="创建人" :label-width="formLabelWidth">
+                    <el-input v-model="form.creator" ></el-input>
+                </el-form-item>
+                <el-form-item label="内容" :label-width="formLabelWidth">
+                    <el-input v-model="form.mainBody" type="textarea" rows="6"></el-input>
+                </el-form-item>
+            </el-form>
+            <div style="text-align:center">
+                <el-button @click="cancel" type="primary">取消</el-button><el-button @click="save" type="primary">保存</el-button>
+            </div>
+        </el-dialog>
+         <el-dialog title="上传" :visible.sync="uploadDialogVisible">
+             <el-upload
+                     class="upload-demo"
+                     action="demo/upload"
+                     :on-success="onSuccess"
+                     :file-list="fileList">
+                 <el-button size="small" type="primary">点击上传</el-button>
+                 <div slot="tip" class="el-upload__tip">上传txt文件</div>
+             </el-upload>
+         </el-dialog>
+       </template>
+    </div>
+</body>
+<script th:src="@{/js/vue.js}"></script>
+<script th:src="@{/js/element.js}"></script>
+<script th:src="@{/js/jquery.min.js}"></script>
+<script>
+    var app = new Vue({
+        el: '#item-list',
+        data: {
+            formLabelWidth: "100px",
+            tableData: [],
+            fileList: [],
+            inputText: "",
+            dialogTableVisible: false,
+            uploadDialogVisible: false,
+            form: {
+                title: "",
+                creator: "",
+                mainBody: ""
+            },
+            queryParam: {
+                q: "",
+                num: 0,
+                size: 1000
+            }
+        },
+        mounted: function (){
+            this.loadList();
+        },
+        methods: {
+            onSuccess(response, file, fileList) {
+                console.log(response);
+                this.loadList();
+            },
+            onUploadClick() {
+                this.uploadDialogVisible = true
+            },
+            loadList() {
+                var that = this;
+                $.ajax({
+                    url: "demo/query",
+                    data: that.queryParam,
+                    type: "GET",
+                    dataType: "json",
+                    success: function (data) {
+                        console.log(data);
+                        that.tableData = data.content;
+                    }
+                })
+            },
+            querySearch (queryString, cb) {
+                $.ajax({
+                    url: "demo/suggest",
+                    data: {
+                        text: queryString
+                    },
+                    type: "GET",
+                    dataType: "json",
+                    success: function (data) {
+                        console.log(data);
+                        cb(data);
+                    }
+                })
+            },
+            handleSelect (item) {
+                this.queryParam.q = item;
+                var that = this;
+                this.loadList();
+            },
+            onAdd() {
+                this.dialogTableVisible = true;
+                this.form = {
+                    title: "",
+                    creator: "",
+                    mainBody: ""
+                }
+            },
+            cancel() {
+                this.dialogTableVisible = false;
+            },
+            save() {
+                var that = this;
+                $.ajax({
+                    url: "demo",
+                    data: JSON.stringify(that.form),
+                    type: "POST",
+                    contentType: "application/json;charset=UTF-8",
+                    success: function (data) {
+                        that.loadList(0);
+                        that.dialogTableVisible = false;
+                    }
+                })
+            }
+        }
+    })
+</script>
+</html>
