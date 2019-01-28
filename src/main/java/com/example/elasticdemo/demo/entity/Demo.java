@@ -8,6 +8,7 @@ import org.springframework.data.elasticsearch.annotations.FieldType;
 import org.springframework.data.elasticsearch.core.completion.Completion;
 
 import java.io.Serializable;
+import java.util.List;
 
 /**
  * @description:
@@ -18,17 +19,15 @@ import java.io.Serializable;
 public class Demo implements Serializable {
     @Id
     private String id;
-    @Field(type = FieldType.Text, searchAnalyzer = "ik_max_word", analyzer = "ik_max_word", store = true)
     private String title;
-    @Field(type = FieldType.Long, store = true)
     private Long createDate;
-    @Field(type = FieldType.Text, searchAnalyzer = "ik_max_word", analyzer = "ik_max_word", store = true)
     private String creator;
-    @Field(type = FieldType.Text, searchAnalyzer = "ik_max_word", analyzer = "ik_max_word", store = true)
     private String mainBody;
     @CompletionField(searchAnalyzer = "ik_max_word", analyzer = "ik_max_word")
     private Completion suggest;
+    private String userId;
     private String createTime;
+    private List<String> groupId;
 
     public String getId() {
         return id;
@@ -84,5 +83,21 @@ public class Demo implements Serializable {
 
     public void setSuggest(Completion suggest) {
         this.suggest = suggest;
+    }
+
+    public String getUserId() {
+        return userId;
+    }
+
+    public void setUserId(String userId) {
+        this.userId = userId;
+    }
+
+    public List<String> getGroupId() {
+        return groupId;
+    }
+
+    public void setGroupId(List<String> groupId) {
+        this.groupId = groupId;
     }
 }

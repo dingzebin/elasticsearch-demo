@@ -54,12 +54,14 @@ public class DemoServiceImpl implements DemoService {
     public void insert(Demo demo) {
         // 创建自动补全索引
         this.createSuggest(demo);
+
         demoRepository.save(demo);
+
     }
 
     private void createSuggest(Demo demo) {
         AnalyzeRequestBuilder requestBuilder = new AnalyzeRequestBuilder(elasticsearchTemplate.getClient()
-                , AnalyzeAction.INSTANCE, "demo", demo.getTitle(), demo.getMainBody());
+                , AnalyzeAction.INSTANCE, "demo", demo.getTitle());
         requestBuilder.setAnalyzer("ik_smart");
         AnalyzeResponse response = requestBuilder.get();
         List<AnalyzeResponse.AnalyzeToken> tokens = response.getTokens();
@@ -80,7 +82,7 @@ public class DemoServiceImpl implements DemoService {
         searchKey = StringUtils.isEmpty(searchKey) ? "*" : searchKey;
         String preTag = "<font color='red'>";
         String postTag = "</font>";
-        SearchQuery query = new NativeSearchQueryBuilder().withFields("id", "title", "creator", "createDate", "mainBody")
+        SearchQuery query = new NativeSearchQueryBuilder().withFields("id", "title", "creator", "createDate", "mainBody", "userId", "groupId")
                 .withQuery(buildQueryBuild(searchKey)).withSort(SortBuilders.fieldSort("createDate").order(SortOrder.DESC))
                 .withHighlightFields(new HighlightBuilder.Field("title").preTags(preTag).postTags(postTag),
                         new HighlightBuilder.Field("mainBody").preTags(preTag).postTags(postTag)
@@ -98,7 +100,6 @@ public class DemoServiceImpl implements DemoService {
                     }
                     Demo demo = JSON.parseObject(JSON.toJSONString(searchHit.getSourceAsMap()), Demo.class);
                     demo.setCreateTime(simpleDateFormat.format(new Date(demo.getCreateDate())));
-                    //name or memoe
                     HighlightField title = searchHit.getHighlightFields().get("title");
                     if (title != null) {
                         demo.setTitle(title.fragments()[0].toString());
@@ -127,7 +128,6 @@ public class DemoServiceImpl implements DemoService {
     @Override
     public void createIndex() {
         elasticsearchTemplate.putMapping(Demo.class);
-
     }
 
     @Override
@@ -155,6 +155,6 @@ public class DemoServiceImpl implements DemoService {
     }
 
     private QueryBuilder buildQueryBuild(String searchKey) {
-        return QueryBuilders.boolQuery().should(QueryBuilders.queryStringQuery(searchKey));
+        return QueryBuilders.boolQuery().should(QueryBuilders.queryStringQuery(searchKey)).must(QueryBuilders.matchQuery("groupId", "10aa72fbff21430fb92ff4530d59e792"));
     }
 }

@@ -22,7 +22,7 @@
        <template>
            <div style="vertical-align: center">
                <el-button type="primary" @click="onAdd">添加</el-button>
-               <el-button type="primary" @click="onUploadClick">上传</el-button>
+               <!-- <el-button type="primary" @click="onUploadClick">上传</el-button> -->
                <el-autocomplete
                        class="inline-input"
                        v-model="queryParam.q"
@@ -30,8 +30,7 @@
                        :trigger-on-focus="false"
                        @select="handleSelect"
                        slot="prepend"
-                       style="width: 300px;"
-               >
+                       style="width: 300px;" >
                    <template slot-scope="{ item }">
                        <div class="name">{{ item }}</div>
                    </template>
@@ -65,6 +64,12 @@
             </el-table-column>
         </el-table>
         <el-dialog title="添加" :visible.sync="dialogTableVisible">
+            <!-- <form id="id_from" action="demo/save" method="post" enctype="multipart/form-data" target="nm_iframe">
+                <input name="title" value="123">
+                <input id="id_file" type="file" name="file">
+                <input type="submit" value="提交">
+            </form>
+            <iframe id="id_iframe" name="nm_iframe" style="display:none;"></iframe> -->
             <el-form :model="form">
                 <el-form-item label="标题" :label-width="formLabelWidth">
                     <el-input v-model="form.title"></el-input>
@@ -72,8 +77,11 @@
                 <el-form-item label="创建人" :label-width="formLabelWidth">
                     <el-input v-model="form.creator" ></el-input>
                 </el-form-item>
-                <el-form-item label="内容" :label-width="formLabelWidth">
+                <!--<el-form-item label="内容" :label-width="formLabelWidth">
                     <el-input v-model="form.mainBody" type="textarea" rows="6"></el-input>
+                </el-form-item>-->
+                <el-form-item label="附件" :label-width="formLabelWidth">
+                    <input id="id_file" type="file" name="file">
                 </el-form-item>
             </el-form>
             <div style="text-align:center">
@@ -96,6 +104,7 @@
 <script th:src="@{/js/vue.js}"></script>
 <script th:src="@{/js/element.js}"></script>
 <script th:src="@{/js/jquery.min.js}"></script>
+<script th:src="@{/js/ajaxfileupload.js}"></script>
 <script>
     var app = new Vue({
         el: '#item-list',
@@ -173,16 +182,24 @@
             },
             save() {
                 var that = this;
-                $.ajax({
-                    url: "demo",
-                    data: JSON.stringify(that.form),
-                    type: "POST",
-                    contentType: "application/json;charset=UTF-8",
-                    success: function (data) {
-                        that.loadList(0);
-                        that.dialogTableVisible = false;
+                $.ajaxFileUpload({
+                    method:"POST",
+                    url:"demo/save",            //需要链接到服务器地址
+                    secureuri:true,
+                    fileElementId:'id_file',                        //文件选择框的id属性
+                    data: that.form,
+                    success: function(data,s, status){
+                        that.$message({
+                            message: '保存成功',
+                            type: 'success'
+                        });
+                        that.loadList()
+                        //上传成功之后的操作
+                    },error: function (data, status, e){
+                        //上传失败之后的操作
                     }
-                })
+                });
+
             }
         }
     })
